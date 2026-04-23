@@ -4,3 +4,5 @@ obj/
 .vs/
 .idea/
 packages.lock.json
+# 內部開發備忘，給 Claude 參考用，不進 git
+CLAUDE.md
