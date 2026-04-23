@@ -110,6 +110,15 @@ public sealed class PartyPanel
         ImGui.SameLine();
         if (ImGui.SmallButton("複製##copycode"))
             ImGui.SetClipboardText(party.CurrentPartyCode ?? "");
+        ImGui.SameLine();
+        if (ImGui.SmallButton("邀請連結##copylink"))
+        {
+            var url = $"https://cycleapple.github.io/xiv-tc-treasure-finder/?party={party.CurrentPartyCode}";
+            ImGui.SetClipboardText(url);
+            ShowStatus("已複製邀請連結到剪貼簿");
+        }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("複製網頁版邀請連結 (含隊伍代碼)，可貼給隊友");
 
         if (party.ExpiresAt is { } exp)
         {
