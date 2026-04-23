@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using Dalamud.Game.Text.SeStringHandling;
 using ImGuiNET;
 using XivTreasureParty.Data;
 using XivTreasureParty.Game;
@@ -171,36 +170,25 @@ public sealed class TreasureListPanel
     }
 
     /// <summary>
-    /// 對應網頁版 copyPlayerMessage 的行為，但不是複製到剪貼簿，而是直接以 /p 發送到遊戲小隊頻道。
-    /// 利用 Dalamud 的 MapLinkPayload 讓坐標部分在聊天顯示為可點擊的地圖連結，
-    /// 不需依賴 DailyRoutines AutoConvertMapLink 也能有一樣效果。
+    /// 對應網頁版 copyPlayerMessage 的行為，但不複製到剪貼簿，而是直接以 /p 送到小隊頻道。
+    /// 一律送純文字（格式: "/p 玩家 地圖名 ( X  , Y ) | 最近傳送水晶:[水晶名]"）。
+    /// 遊戲的 ProcessChatBoxEntry 只接受玩家能打出來的 SeString，會吃掉預先包好的
+    /// MapLinkPayload，所以包了也會消失 —— 純文字配上 DailyRoutines 的
+    /// AutoConvertMapLink 會自動轉成可點擊地圖連結（不裝也仍是可讀的純文字）。
     /// </summary>
     private static void SendTreasureToChat(Treasure t)
     {
         try
         {
-            var mapLink = TreasureLocator.TryBuildMapLink(t);
+            var mapName = MapData.GetMapName(t.MapId);
             var aetheryte = AetheryteData.FindNearestByMapId(t.MapId, t.Coords.X, t.Coords.Y);
             var player = string.IsNullOrWhiteSpace(t.Player) ? "" : t.Player + " ";
 
-            var se = new SeString();
-            se.Append("/p ");
-            if (!string.IsNullOrEmpty(player)) se.Append(player);
-
-            if (mapLink != null)
-            {
-                se.Append(mapLink);
-            }
-            else
-            {
-                var mapName = MapData.GetMapName(t.MapId);
-                se.Append($"{mapName} ( {t.Coords.X:0.0}  , {t.Coords.Y:0.0} )");
-            }
-
+            var text = $"/p {player}{mapName} ( {t.Coords.X:0.0}  , {t.Coords.Y:0.0} )";
             if (aetheryte != null)
-                se.Append($" | 最近傳送水晶:[{aetheryte.Name}]");
+                text += $" | 最近傳送水晶:[{aetheryte.Name}]";
 
-            Plugin.ChatSender.SendSeString(se);
+            Plugin.ChatSender.SendMessage(text);
         }
         catch (Exception ex)
         {
