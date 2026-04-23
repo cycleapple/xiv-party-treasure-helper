@@ -1,0 +1,11 @@
+{
+  "Author": "cycleapple",
+  "Name": "XIV 藏寶圖工具小幫手",
+  "InternalName": "XivTreasureParty",
+  "Punchline": "繁中藏寶圖組隊協作，與網頁版共享同一個 Firebase 房間。",
+  "Description": "Dalamud 插件版本的 FFXIV 繁中藏寶圖工具小幫手。使用相同的 Firebase 後端，可與網頁版（https://cycleapple.github.io/xiv-tc-treasure-finder/）使用者混合組隊。支援建立/加入房間、手動新增藏寶圖、即時同步、順序排程、完成勾選等。",
+  "ApplicableVersion": "any",
+  "Tags": ["treasure", "map", "party", "zhTW", "Chinese"],
+  "CategoryTags": ["utility"],
+  "RepoUrl": "https://github.com/cycleapple/xiv-party-treasure-helper"
+}

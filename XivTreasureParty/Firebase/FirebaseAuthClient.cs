@@ -1,0 +1,156 @@
+using System;
+using System.Net.Http;
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace XivTreasureParty.Firebase;
+
+public sealed class FirebaseAuthClient : IDisposable
+{
+    private readonly string _apiKey;
+    private readonly HttpClient _http = new();
+    private readonly SemaphoreSlim _mutex = new(1, 1);
+
+    public string? IdToken { get; private set; }
+    public string? RefreshToken { get; private set; }
+    public string? LocalId { get; private set; }
+    public DateTime TokenExpiresAtUtc { get; private set; } = DateTime.MinValue;
+
+    public bool IsSignedIn => !string.IsNullOrEmpty(IdToken) && !string.IsNullOrEmpty(LocalId);
+
+    public FirebaseAuthClient(string apiKey)
+    {
+        _apiKey = apiKey;
+        _http.Timeout = TimeSpan.FromSeconds(30);
+
+        var cfg = Plugin.Config;
+        if (!string.IsNullOrEmpty(cfg.LastIdToken) && !string.IsNullOrEmpty(cfg.LastRefreshToken))
+        {
+            IdToken = cfg.LastIdToken;
+            RefreshToken = cfg.LastRefreshToken;
+            LocalId = cfg.LastLocalId;
+            TokenExpiresAtUtc = cfg.LastTokenRefreshedAtUtc?.AddMinutes(55) ?? DateTime.MinValue;
+        }
+    }
+
+    public async Task<string> EnsureSignedInAsync(CancellationToken ct = default)
+    {
+        await _mutex.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (IsSignedIn && DateTime.UtcNow < TokenExpiresAtUtc - TimeSpan.FromMinutes(2))
+                return IdToken!;
+
+            if (!string.IsNullOrEmpty(RefreshToken))
+            {
+                try
+                {
+                    await RefreshAsyncInternal(ct).ConfigureAwait(false);
+                    return IdToken!;
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Log.Warning($"Token refresh 失敗，改走匿名登入：{ex.Message}");
+                }
+            }
+
+            await SignInAnonymouslyAsyncInternal(ct).ConfigureAwait(false);
+            return IdToken!;
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
+    public async Task<string> GetFreshTokenAsync(CancellationToken ct = default)
+    {
+        return await EnsureSignedInAsync(ct).ConfigureAwait(false);
+    }
+
+    private async Task SignInAnonymouslyAsyncInternal(CancellationToken ct)
+    {
+        var url = $"{FirebaseConfig.IdentityToolkitBase}/accounts:signUp?key={_apiKey}";
+        using var resp = await _http.PostAsJsonAsync(url, new { returnSecureToken = true }, ct).ConfigureAwait(false);
+        var raw = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode)
+            throw new Exception($"匿名登入失敗 ({(int)resp.StatusCode}): {raw}");
+
+        var data = JsonSerializer.Deserialize<SignUpResponse>(raw)
+                   ?? throw new Exception("匿名登入回應無法解析");
+
+        IdToken = data.IdToken;
+        RefreshToken = data.RefreshToken;
+        LocalId = data.LocalId;
+        if (int.TryParse(data.ExpiresIn, out var seconds))
+            TokenExpiresAtUtc = DateTime.UtcNow.AddSeconds(seconds);
+        else
+            TokenExpiresAtUtc = DateTime.UtcNow.AddMinutes(55);
+
+        PersistToConfig();
+        Plugin.Log.Info($"Firebase 匿名登入成功 uid={LocalId}");
+    }
+
+    private async Task RefreshAsyncInternal(CancellationToken ct)
+    {
+        var url = $"{FirebaseConfig.SecureTokenBase}/token?key={_apiKey}";
+        var form = new FormUrlEncodedContent(new[]
+        {
+            new System.Collections.Generic.KeyValuePair<string, string>("grant_type", "refresh_token"),
+            new System.Collections.Generic.KeyValuePair<string, string>("refresh_token", RefreshToken!)
+        });
+        using var resp = await _http.PostAsync(url, form, ct).ConfigureAwait(false);
+        var raw = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode)
+            throw new Exception($"refresh 失敗 ({(int)resp.StatusCode}): {raw}");
+
+        var data = JsonSerializer.Deserialize<RefreshResponse>(raw)
+                   ?? throw new Exception("refresh 回應無法解析");
+
+        IdToken = data.IdToken;
+        RefreshToken = data.RefreshToken;
+        LocalId = data.UserId;
+        if (int.TryParse(data.ExpiresIn, out var seconds))
+            TokenExpiresAtUtc = DateTime.UtcNow.AddSeconds(seconds);
+        else
+            TokenExpiresAtUtc = DateTime.UtcNow.AddMinutes(55);
+
+        PersistToConfig();
+        Plugin.Log.Debug("Firebase token 已刷新");
+    }
+
+    private void PersistToConfig()
+    {
+        var cfg = Plugin.Config;
+        cfg.LastIdToken = IdToken;
+        cfg.LastRefreshToken = RefreshToken;
+        cfg.LastLocalId = LocalId;
+        cfg.LastTokenRefreshedAtUtc = DateTime.UtcNow;
+        cfg.Save();
+    }
+
+    public void Dispose()
+    {
+        _http.Dispose();
+        _mutex.Dispose();
+    }
+
+    private sealed class SignUpResponse
+    {
+        [JsonPropertyName("idToken")] public string IdToken { get; set; } = "";
+        [JsonPropertyName("refreshToken")] public string RefreshToken { get; set; } = "";
+        [JsonPropertyName("localId")] public string LocalId { get; set; } = "";
+        [JsonPropertyName("expiresIn")] public string ExpiresIn { get; set; } = "3600";
+    }
+
+    private sealed class RefreshResponse
+    {
+        [JsonPropertyName("id_token")] public string IdToken { get; set; } = "";
+        [JsonPropertyName("refresh_token")] public string RefreshToken { get; set; } = "";
+        [JsonPropertyName("user_id")] public string UserId { get; set; } = "";
+        [JsonPropertyName("expires_in")] public string ExpiresIn { get; set; } = "3600";
+    }
+}
