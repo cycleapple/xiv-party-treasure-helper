@@ -69,7 +69,7 @@ public sealed class Plugin : IDalamudPlugin
         PartyService = new PartyService(FirebaseDb, FirebaseAuth);
         SyncService = new SyncService(FirebaseStream);
         Heartbeat = new HeartbeatService(FirebaseDb, PartyService, FirebaseAuth);
-        ChatSender = new ChatSender(gameInterop);
+        ChatSender = new ChatSender();
         HuntReader = new TreasureHuntReader(gameInterop);
         HuntAutoCapture = new HuntAutoCapture(framework);
 
