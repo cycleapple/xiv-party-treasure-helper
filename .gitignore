@@ -6,3 +6,5 @@ obj/
 packages.lock.json
 # 內部開發備忘，給 Claude 參考用，不進 git
 CLAUDE.md
+# Discord 貼文草稿，不進 git
+DISCORD.md
