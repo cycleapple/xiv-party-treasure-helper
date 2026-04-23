@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Dalamud.Game.Text.SeStringHandling;
 using ImGuiNET;
 using XivTreasureParty.Data;
 using XivTreasureParty.Game;
@@ -170,11 +171,12 @@ public sealed class TreasureListPanel
     }
 
     /// <summary>
-    /// 對應網頁版 copyPlayerMessage 的行為，但不複製到剪貼簿，而是直接以 /p 送到小隊頻道。
-    /// 一律送純文字（格式: "/p 玩家 地圖名 ( X  , Y ) | 最近傳送水晶:[水晶名]"）。
-    /// 遊戲的 ProcessChatBoxEntry 只接受玩家能打出來的 SeString，會吃掉預先包好的
-    /// MapLinkPayload，所以包了也會消失 —— 純文字配上 DailyRoutines 的
-    /// AutoConvertMapLink 會自動轉成可點擊地圖連結（不裝也仍是可讀的純文字）。
+    /// 對應網頁版 copyPlayerMessage，直接以 /p 送到小隊頻道，座標部分用
+    /// PreMapLinkPayload (AutoTranslateText 類型) 讓連結可點擊。
+    /// 這種 payload 類型是遊戲原生 auto-translate token (&lt;flag&gt; 那類)
+    /// 的同族，ProcessChatBoxEntry 不會過濾掉 — 效果等同於 DailyRoutines
+    /// AutoConvertMapLink 處理後的結果，不需要額外安裝它。
+    /// 若查不到 TerritoryType/Map，fallback 為純文字格式。
     /// </summary>
     private static void SendTreasureToChat(Treasure t)
     {
@@ -184,11 +186,22 @@ public sealed class TreasureListPanel
             var aetheryte = AetheryteData.FindNearestByMapId(t.MapId, t.Coords.X, t.Coords.Y);
             var player = string.IsNullOrWhiteSpace(t.Player) ? "" : t.Player + " ";
 
-            var text = $"/p {player}{mapName} ( {t.Coords.X:0.0}  , {t.Coords.Y:0.0} )";
-            if (aetheryte != null)
-                text += $" | 最近傳送水晶:[{aetheryte.Name}]";
+            var preLink = TreasureLocator.TryBuildAutoTranslateMapLink(t);
 
-            Plugin.ChatSender.SendMessage(text);
+            var sb = new SeStringBuilder();
+            sb.AddText($"/p {player}");
+            if (preLink != null)
+            {
+                sb.Add(preLink);  // 渲染: [旗標圖示][地圖名] ( X , Y )
+            }
+            else
+            {
+                sb.AddText($"{mapName} ( {t.Coords.X:0.0}  , {t.Coords.Y:0.0} )");
+            }
+            if (aetheryte != null)
+                sb.AddText($" | 最近傳送水晶:[{aetheryte.Name}]");
+
+            Plugin.ChatSender.SendSeString(sb.Build());
         }
         catch (Exception ex)
         {

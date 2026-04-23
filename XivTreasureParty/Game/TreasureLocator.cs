@@ -61,4 +61,29 @@ public static class TreasureLocator
             return 0;
         }
     }
+
+    /// <summary>
+    /// 建立聊天可送出的 PreMapLinkPayload（AutoTranslateText 類型）。
+    /// 失敗 (查不到 Map row / territory) 回 null。
+    /// </summary>
+    public static PreMapLinkPayload? TryBuildAutoTranslateMapLink(Treasure t)
+    {
+        try
+        {
+            var sheet = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Map>();
+            if (sheet == null) return null;
+            var map = sheet.GetRow((uint)t.MapId);
+            var territoryId = map.TerritoryType.RowId;
+            if (territoryId == 0) return null;
+
+            var rawX = PreMapLinkPayload.GenerateRawPosition(t.Coords.X, map.OffsetX, map.SizeFactor);
+            var rawY = PreMapLinkPayload.GenerateRawPosition(t.Coords.Y, map.OffsetY, map.SizeFactor);
+            return new PreMapLinkPayload(territoryId, (uint)t.MapId, rawX, rawY);
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Warning($"[TreasureLocator] 建立 PreMapLinkPayload 失敗 mapId={t.MapId}: {ex.Message}");
+            return null;
+        }
+    }
 }
