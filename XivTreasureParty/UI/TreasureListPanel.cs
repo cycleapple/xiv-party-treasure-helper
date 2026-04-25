@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using Dalamud.Game.Text.SeStringHandling;
 using ImGuiNET;
 using XivTreasureParty.Data;
 using XivTreasureParty.Game;
@@ -171,12 +170,16 @@ public sealed class TreasureListPanel
     }
 
     /// <summary>
-    /// 對應網頁版 copyPlayerMessage，直接以 /p 送到小隊頻道，座標部分用
-    /// PreMapLinkPayload (AutoTranslateText 類型) 讓連結可點擊。
-    /// 這種 payload 類型是遊戲原生 auto-translate token (&lt;flag&gt; 那類)
-    /// 的同族，ProcessChatBoxEntry 不會過濾掉 — 效果等同於 DailyRoutines
-    /// AutoConvertMapLink 處理後的結果，不需要額外安裝它。
-    /// 若查不到 TerritoryType/Map，fallback 為純文字格式。
+    /// 對應網頁版 copyPlayerMessage，以 /p 送到小隊頻道。**純文字座標** —
+    /// 含一個保險的 PreMapLinkPayload 在文字後面（給有裝 AutoConvertMapLink
+    /// 等接收端 rewrite 工具的玩家可點），但即使 payload 被 input
+    /// sanitizer 剝掉，文字部分的座標一定看得到。
+    ///
+    /// 為何不靠 PreMapLinkPayload 取代文字：實測 ProcessChatBoxEntry 對
+    /// AutoTranslateText 類 payload 有 whitelist (只允許 &lt;flag&gt;/&lt;pos&gt;
+    /// 等預設 token)，地圖位置 chunk `[0xC9][0x04]` 雖然格式合法但不在
+    /// whitelist，會被靜默剝掉，導致整段座標消失，下游 viewer 只看到
+    /// "/p 玩家 | 最近傳送水晶:[..]"。
     /// </summary>
     private static void SendTreasureToChat(Treasure t)
     {
@@ -186,22 +189,11 @@ public sealed class TreasureListPanel
             var aetheryte = AetheryteData.FindNearestByMapId(t.MapId, t.Coords.X, t.Coords.Y);
             var player = string.IsNullOrWhiteSpace(t.Player) ? "" : t.Player + " ";
 
-            var preLink = TreasureLocator.TryBuildAutoTranslateMapLink(t);
-
-            var sb = new SeStringBuilder();
-            sb.AddText($"/p {player}");
-            if (preLink != null)
-            {
-                sb.Add(preLink);  // 渲染: [旗標圖示][地圖名] ( X , Y )
-            }
-            else
-            {
-                sb.AddText($"{mapName} ( {t.Coords.X:0.0}  , {t.Coords.Y:0.0} )");
-            }
+            var text = $"/p {player}{mapName} ( {t.Coords.X:0.0}  , {t.Coords.Y:0.0} )";
             if (aetheryte != null)
-                sb.AddText($" | 最近傳送水晶:[{aetheryte.Name}]");
+                text += $" | 最近傳送水晶:[{aetheryte.Name}]";
 
-            Plugin.ChatSender.SendSeString(sb.Build());
+            Plugin.ChatSender.SendMessage(text);
         }
         catch (Exception ex)
         {
