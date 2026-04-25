@@ -28,5 +28,11 @@ public class Configuration : IPluginConfiguration
     /// <summary>讀取/自動偵測到新藏寶圖時，順便在遊戲內開啟地圖並打旗標。</summary>
     public bool AutoOpenMapOnCapture { get; set; } = false;
 
+    /// <summary>
+    /// 攔截聊天訊息把「🚩地圖名 ( X , Y )」純文字轉成可點擊地圖連結 (本插件接收端)。
+    /// 等同 DailyRoutines AutoConvertMapLink 的功能；兩者並存沒問題（idempotent，只有第一個會作用）。
+    /// </summary>
+    public bool EnableMapLinkConversion { get; set; } = true;
+
     public void Save() => Plugin.PluginInterface.SavePluginConfig(this);
 }

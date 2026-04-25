@@ -28,8 +28,6 @@ namespace XivTreasureParty.Game;
 /// </summary>
 public sealed class PreMapLinkPayload : Payload
 {
-    private const byte START_BYTE = 0x02;
-    private const byte END_BYTE = 0x03;
     private const byte CHUNK_TYPE_AUTO_TRANSLATE = 0x2E;
     private const int RAW_Z = -30000;
 

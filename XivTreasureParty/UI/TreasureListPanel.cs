@@ -189,7 +189,10 @@ public sealed class TreasureListPanel
             var aetheryte = AetheryteData.FindNearestByMapId(t.MapId, t.Coords.X, t.Coords.Y);
             var player = string.IsNullOrWhiteSpace(t.Player) ? "" : t.Player + " ";
 
-            var text = $"/p {player}{mapName} ( {t.Coords.X:0.0}  , {t.Coords.Y:0.0} )";
+            //  是 FFXIV 旗標 PUA 字符，作為 MapLinkAutoConverter (本插件接收端 hook)
+            // 與 DailyRoutines AutoConvertMapLink 的 regex 觸發 prefix。
+            // 即使對方沒裝任何轉換工具，文字仍可讀（顯示為一個小旗標符號 + 地圖名 + 座標）。
+            var text = $"/p {player}{mapName} ( {t.Coords.X:0.0}  , {t.Coords.Y:0.0} )";
             if (aetheryte != null)
                 text += $" | 最近傳送水晶:[{aetheryte.Name}]";
 
