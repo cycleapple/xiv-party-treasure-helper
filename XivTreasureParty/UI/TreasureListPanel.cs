@@ -188,15 +188,20 @@ public sealed class TreasureListPanel
             var mapName = MapData.GetMapName(t.MapId);
             var aetheryte = AetheryteData.FindNearestByMapId(t.MapId, t.Coords.X, t.Coords.Y);
             var player = string.IsNullOrWhiteSpace(t.Player) ? "" : t.Player + " ";
+            var preLink = TreasureLocator.TryBuildAutoTranslateMapLink(t);
 
-            //  是 FFXIV 旗標 PUA 字符，作為 MapLinkAutoConverter (本插件接收端 hook)
-            // 與 DailyRoutines AutoConvertMapLink 的 regex 觸發 prefix。
-            // 即使對方沒裝任何轉換工具，文字仍可讀（顯示為一個小旗標符號 + 地圖名 + 座標）。
-            var text = $"/p {player}{mapName} ( {t.Coords.X:0.0}  , {t.Coords.Y:0.0} )";
+            // 雙保險：純文字 + PreMapLinkPayload。
+            //  (U+E0BB) 是 FFXIV 旗標 PUA 字符，配合 regex 讓接收端 hook (本插件 / AutoConvertMapLink)
+            // 在「chunk 被 input sanitizer 吃掉」的情況下仍能把文字轉成可點連結。
+            // 接收端 hook 偵測到 chunk 已存在時會把多餘的純文字模式吃掉避免重複顯示。
+            var sb = new Dalamud.Game.Text.SeStringHandling.SeStringBuilder();
+            sb.AddText($"/p {player}{mapName} ( {t.Coords.X:0.0}  , {t.Coords.Y:0.0} )");
+            if (preLink != null)
+                sb.Add(preLink);
             if (aetheryte != null)
-                text += $" | 最近傳送水晶:[{aetheryte.Name}]";
+                sb.AddText($" | 最近傳送水晶:[{aetheryte.Name}]");
 
-            Plugin.ChatSender.SendMessage(text);
+            Plugin.ChatSender.SendSeString(sb.Build());
         }
         catch (Exception ex)
         {

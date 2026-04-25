@@ -106,14 +106,44 @@ public sealed unsafe class MapLinkAutoConverter : IDisposable
 
             var parsed = SeString.Parse(raw);
 
-            // 已經是地圖連結 payload 了 (可能其他插件已處理)，跳過避免雙重轉換
+            // 已有 [C9][04] 地圖連結 chunk，把同訊息中重複的純文字 "(map)( X , Y )" 吃掉
+            // (我們送出端為了「chunk 被吞」的保險會雙塞文字 + chunk；對方有插件時要去重)
+            var hasMapChunk = false;
             foreach (var p in parsed.Payloads)
             {
                 if (p is AutoTranslatePayload at)
                 {
                     var enc = at.Encode();
-                    if (enc.Length >= 5 && enc[3] == 0xC9 && enc[4] == 0x04) return ret;
+                    if (enc.Length >= 5 && enc[3] == 0xC9 && enc[4] == 0x04) { hasMapChunk = true; break; }
                 }
+            }
+            if (hasMapChunk)
+            {
+                var dedupChanged = false;
+                foreach (var p in parsed.Payloads)
+                {
+                    if (p is TextPayload tp && !string.IsNullOrEmpty(tp.Text))
+                    {
+                        var newText = MapLinkRegex.Replace(tp.Text, "");
+                        if (newText != tp.Text)
+                        {
+                            tp.Text = newText;
+                            dedupChanged = true;
+                        }
+                    }
+                }
+                if (dedupChanged)
+                {
+                    var newMessage = parsed.Encode();
+                    var capacity = Marshal.ReadInt64(ret + 8);
+                    if (newMessage.Length + 1 <= capacity)
+                    {
+                        Marshal.WriteInt64(ret + 16, newMessage.Length + 1);
+                        Marshal.Copy(newMessage, 0, pMessage, newMessage.Length);
+                        Marshal.WriteByte(pMessage, newMessage.Length, 0x00);
+                    }
+                }
+                return ret;
             }
 
             for (var i = 0; i < parsed.Payloads.Count; i++)
