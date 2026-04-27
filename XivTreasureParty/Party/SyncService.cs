@@ -83,6 +83,37 @@ public sealed class SyncService
         _currentCode = null;
     }
 
+    /// <summary>
+    /// 給 PartyService 在 push 成功後立刻把新藏寶圖補進本地 dict 用，
+    /// 避免 SSE 延遲或在 NAT/proxy 後靜默斷線時 UI 看不到剛新增的圖。
+    /// SSE 之後若送回同一筆會直接覆寫，不會產生重複。
+    /// </summary>
+    public void UpsertTreasureLocal(string key, Treasure t)
+    {
+        Plugin.Framework.RunOnFrameworkThread(() =>
+        {
+            t.FirebaseKey = key;
+            Treasures[key] = t;
+            TreasuresChanged?.Invoke();
+        });
+    }
+
+    /// <summary>同上，刪除時也補一個本地刪除（remove 在 SSE 醒來前不會出現）。</summary>
+    public void RemoveTreasureLocal(string key)
+    {
+        Plugin.Framework.RunOnFrameworkThread(() =>
+        {
+            if (Treasures.Remove(key))
+                TreasuresChanged?.Invoke();
+        });
+    }
+
+    /// <summary>給 PartyService 在批次本機更新 order 後通知 UI 重畫。</summary>
+    public void NotifyTreasuresChanged()
+    {
+        Plugin.Framework.RunOnFrameworkThread(() => TreasuresChanged?.Invoke());
+    }
+
     private void ApplyPut<T>(Dictionary<string, T> target, StreamEvent ev,
                              Action<Dictionary<string, T>, string, JsonElement> applyValue) where T : class
     {

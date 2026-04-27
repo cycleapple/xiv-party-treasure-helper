@@ -148,6 +148,24 @@ public sealed class PartyPanel
         }
         ImGui.EndChild();
 
+        var canOptimize = party.CanModifyOrder() && sync.Treasures.Count > 1;
+        if (!canOptimize) ImGui.BeginDisabled();
+        if (ImGui.Button("優化路線") && !_busy)
+        {
+            RunOptimize();
+        }
+        if (!canOptimize) ImGui.EndDisabled();
+        if (ImGui.IsItemHovered())
+        {
+            if (party.OrderLocked && !party.IsLeader)
+                ImGui.SetTooltip("順序已被房主鎖定");
+            else if (sync.Treasures.Count <= 1)
+                ImGui.SetTooltip("需要至少 2 個藏寶點");
+            else
+                ImGui.SetTooltip("以地圖分組 + 最近鄰居法重新排序，與網頁版一致");
+        }
+        ImGui.SameLine();
+
         if (ImGui.Button(party.OrderLocked ? "解鎖順序" : "鎖定順序") && party.IsLeader && !_busy)
         {
             RunAsync(async () => await party.ToggleOrderLockAsync(),
@@ -174,6 +192,37 @@ public sealed class PartyPanel
             ImGui.Spacing();
             ImGui.TextColored(new System.Numerics.Vector4(1f, 0.7f, 0.3f, 1f), "房主已鎖定順序");
         }
+    }
+
+    private void RunOptimize()
+    {
+        if (_busy) return;
+        _busy = true;
+        _ = System.Threading.Tasks.Task.Run(async () =>
+        {
+            try
+            {
+                var (before, after, reordered) = await Plugin.PartyService.AutoOptimizeRouteAsync();
+                if (reordered == 0)
+                    ShowStatus("路線已是最佳，未調整");
+                else
+                {
+                    var pct = before > 0 ? (int)Math.Round((1 - after / before) * 100) : 0;
+                    ShowStatus(pct > 0
+                        ? $"已優化路線：距離縮短 {pct}%，調整 {reordered} 項"
+                        : $"已重新排序 {reordered} 項");
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Error(ex, "優化路線失敗");
+                ShowStatus("優化失敗: " + ex.Message);
+            }
+            finally
+            {
+                _busy = false;
+            }
+        });
     }
 
     private void RunAsync(Func<System.Threading.Tasks.Task> action, string? successMessage = null)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using XivTreasureParty.Firebase;
 using XivTreasureParty.Party.Models;
@@ -172,9 +173,27 @@ public sealed class PartyService
             foreach (var t in treasures.Values)
                 if (t.Order > maxOrder) maxOrder = t.Order;
         }
+        var order = maxOrder + 1;
 
-        var payload = TreasureFactory.BuildNewTreasurePayload(treasure, maxOrder + 1, uid, Nickname ?? "");
+        var payload = TreasureFactory.BuildNewTreasurePayload(treasure, order, uid, Nickname ?? "");
         var key = await _db.PushAsync($"parties/{code}/treasures", payload).ConfigureAwait(false);
+
+        // Optimistic local add：避免 SSE 延遲/靜默斷線時 UI 看不到剛新增的圖。
+        // 過去用戶回報「按下加入清單，狀態顯示已加入但右側清單沒有」就是這個情境。
+        Plugin.SyncService.UpsertTreasureLocal(key, new Treasure
+        {
+            Id = treasure.Id,
+            Coords = new TreasureCoords { X = treasure.Coords.X, Y = treasure.Coords.Y },
+            MapId = treasure.MapId,
+            GradeItemId = treasure.GradeItemId,
+            PartySize = treasure.PartySize,
+            AddedBy = uid,
+            AddedByNickname = Nickname ?? "",
+            AddedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Order = order,
+            Completed = false,
+            Player = Nickname,
+        });
 
         // 延長隊伍過期時間
         var newExpires = DateTimeOffset.UtcNow.AddHours(PartyExpiryHours).ToUnixTimeMilliseconds();
@@ -185,10 +204,12 @@ public sealed class PartyService
         return key;
     }
 
-    public Task RemoveTreasureAsync(string firebaseKey)
+    public async Task RemoveTreasureAsync(string firebaseKey)
     {
         EnsureInParty();
-        return _db.RemoveAsync($"parties/{CurrentPartyCode}/treasures/{firebaseKey}");
+        await _db.RemoveAsync($"parties/{CurrentPartyCode}/treasures/{firebaseKey}").ConfigureAwait(false);
+        // Optimistic local remove，同 Add 的理由
+        Plugin.SyncService.RemoveTreasureLocal(firebaseKey);
     }
 
     public async Task ToggleTreasureCompleteAsync(string firebaseKey)
@@ -230,6 +251,52 @@ public sealed class PartyService
             [$"{key1}/order"] = o2,
             [$"{key2}/order"] = o1
         }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 對應網頁版 PartyService.autoOptimizeRoute：地圖分組 + 最近鄰居法。
+    /// REST 沒有 transaction，這裡先 GET 全部 → optimize → PATCH 多路徑 order 更新。
+    /// 競態風險：別人在 GET~PATCH 之間新增的圖會保留它原本的 order，不會被覆寫。
+    /// 本機 dict 也直接更新，避免 SSE 延遲時 UI 看不到順序變化。
+    /// </summary>
+    public async Task<(double Before, double After, int Reordered)> AutoOptimizeRouteAsync(bool useMapGrouping = true)
+    {
+        EnsureInParty();
+        if (!CanModifyOrder()) throw new Exception("順序已被房主鎖定，無法優化");
+
+        var code = CurrentPartyCode!;
+        var treasuresMap = await _db.GetAsync<Dictionary<string, Treasure>>($"parties/{code}/treasures").ConfigureAwait(false);
+        if (treasuresMap == null || treasuresMap.Count <= 1)
+            return (0, 0, 0);
+
+        // 把 firebaseKey 帶到物件上，optimize 完才知道要更新哪些 path
+        foreach (var (k, t) in treasuresMap) t.FirebaseKey = k;
+
+        var byOrder = treasuresMap.Values.OrderBy(t => t.Order).ToList();
+        var beforeStats = RouteOptimizer.Analyze(byOrder);
+
+        var optimized = RouteOptimizer.Optimize(byOrder, useMapGrouping);
+        var afterStats = RouteOptimizer.Analyze(optimized);
+
+        var updates = new Dictionary<string, object?>();
+        var reordered = 0;
+        for (var i = 0; i < optimized.Count; i++)
+        {
+            var newOrder = i + 1;
+            var t = optimized[i];
+            if (t.Order != newOrder) reordered++;
+            updates[$"{t.FirebaseKey}/order"] = newOrder;
+            // optimistic 本地 patch — SSE 之後送回同一個值會無作用
+            if (Plugin.SyncService.Treasures.TryGetValue(t.FirebaseKey, out var local))
+                local.Order = newOrder;
+        }
+
+        if (updates.Count > 0)
+            await _db.UpdateAsync($"parties/{code}/treasures", updates).ConfigureAwait(false);
+
+        Plugin.SyncService.NotifyTreasuresChanged();
+
+        return (beforeStats.TotalDistance, afterStats.TotalDistance, reordered);
     }
 
     public async Task ClearCompletedAsync()
