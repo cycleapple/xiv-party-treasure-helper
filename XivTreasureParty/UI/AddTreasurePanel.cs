@@ -38,7 +38,7 @@ public sealed class AddTreasurePanel
             {
                 var g = grades[i];
                 var selected = i == _gradeIndex;
-                var label = $"{g.Grade} {g.Name} [{(g.PartySize == 8 ? "8人" : "單人")}]";
+                var label = $"{g.Grade} {g.Name} [{(g.PartySize == 8 ? "8 人" : "單人")}]";
                 if (ImGui.Selectable(label, selected))
                 {
                     _gradeIndex = i;
@@ -127,7 +127,7 @@ public sealed class AddTreasurePanel
     {
         if (!Plugin.HuntReader.IsAvailable)
         {
-            ImGui.TextDisabled("(讀取藏寶圖功能不可用，signature 解析失敗)");
+            ImGui.TextDisabled("（讀取藏寶圖功能不可用，特徵碼解析失敗）");
             ImGui.Spacing();
             return;
         }
@@ -190,7 +190,7 @@ public sealed class AddTreasurePanel
         }
         if (gradeIdx < 0)
         {
-            ShowStatus($"未知等級 itemId={decoded.GradeItemId}");
+            ShowStatus($"未知等級（itemId={decoded.GradeItemId}）");
             return;
         }
 
@@ -198,7 +198,7 @@ public sealed class AddTreasurePanel
         var mapIdx = maps.IndexOf(decoded.MapId);
         if (mapIdx < 0)
         {
-            ShowStatus($"未知地圖 mapId={decoded.MapId}");
+            ShowStatus($"未知地圖（mapId={decoded.MapId}）");
             return;
         }
 
@@ -223,7 +223,7 @@ public sealed class AddTreasurePanel
 
         var g = grades[gradeIdx];
         var mapName = MapData.GetMapName(decoded.MapId);
-        ShowStatus($"已預選: {g.Grade} {mapName} ({decoded.X:0.0}, {decoded.Y:0.0})");
+        ShowStatus($"已預選：{g.Grade} {mapName}（{decoded.X:0.0}, {decoded.Y:0.0}）");
     }
 
     private void ShowStatus(string msg)
@@ -247,7 +247,7 @@ public sealed class AddTreasurePanel
             catch (Exception ex)
             {
                 Plugin.Log.Error(ex, "加入藏寶圖失敗");
-                _status = "失敗: " + ex.Message;
+                _status = "失敗：" + ex.Message;
                 _statusUntil = DateTime.UtcNow.AddSeconds(5);
             }
             finally

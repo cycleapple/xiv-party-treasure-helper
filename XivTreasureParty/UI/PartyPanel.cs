@@ -80,7 +80,7 @@ public sealed class PartyPanel
         }
 
         ImGui.Spacing();
-        ImGui.TextUnformatted("加入隊伍 (8 碼代碼)");
+        ImGui.TextUnformatted("加入隊伍（8 碼代碼）");
         ImGui.SetNextItemWidth(-80f);
         ImGui.InputText("##joincode", ref _joinCodeBuf, 16, ImGuiInputTextFlags.CharsUppercase);
         ImGui.SameLine();
@@ -118,13 +118,13 @@ public sealed class PartyPanel
             ShowStatus("已複製邀請連結到剪貼簿");
         }
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip("複製網頁版邀請連結 (含隊伍代碼)，可貼給隊友");
+            ImGui.SetTooltip("複製包含隊伍代碼的網頁版邀請連結，可傳給隊友");
 
         if (party.ExpiresAt is { } exp)
         {
             var remaining = DateTimeOffset.FromUnixTimeMilliseconds(exp) - DateTimeOffset.UtcNow;
             if (remaining.TotalSeconds > 0)
-                ImGui.TextUnformatted($"過期倒數: {(int)remaining.TotalHours:00}:{remaining.Minutes:00}:{remaining.Seconds:00}");
+                ImGui.TextUnformatted($"過期倒數：{(int)remaining.TotalHours:00}:{remaining.Minutes:00}:{remaining.Seconds:00}");
             else
                 ImGui.TextUnformatted("隊伍已過期");
         }
@@ -216,7 +216,7 @@ public sealed class PartyPanel
             catch (Exception ex)
             {
                 Plugin.Log.Error(ex, "優化路線失敗");
-                ShowStatus("優化失敗: " + ex.Message);
+                ShowStatus("優化失敗：" + ex.Message);
             }
             finally
             {
@@ -240,7 +240,7 @@ public sealed class PartyPanel
             catch (Exception ex)
             {
                 Plugin.Log.Error(ex, "PartyPanel 操作失敗");
-                ShowStatus("失敗: " + ex.Message);
+                ShowStatus("失敗：" + ex.Message);
             }
             finally
             {
